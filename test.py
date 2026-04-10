@@ -14,13 +14,11 @@ urllib.request.urlretrieve(
 )
 
 POSE_CONNECTIONS = [
-    (11, 12), (11, 13), (13, 15), (12, 14), (14, 16),
-    (11, 23), (12, 24), (23, 24),
-    (23, 25), (25, 27), (24, 26), (26, 28),
+    (11, 12),
     (0, 11), (0, 12),
 ]
 
-RELEVANT = {0, 11, 12, 23, 24}
+RELEVANT = {0, 11, 12}
 
 def draw_landmarks(frame, landmarks):
     h, w = frame.shape[:2]
