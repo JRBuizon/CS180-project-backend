@@ -20,7 +20,7 @@ from sklearn.ensemble import RandomForestClassifier
 class PostureApp:
     def __init__(self, window):
         self.window = window
-        self.window.title("Personal Posture Assistant")
+        self.window.title("Personal Posture Journal")
         self.window.geometry("1000x650")
         self.window.configure(bg="#1e1e2e")
 
@@ -159,7 +159,7 @@ class PostureApp:
             return
 
         try:
-            dataframes = [pd.read_csv(f) for f in csv_files if os.path.getsize(f) > 10]
+            dataframes = [pd.read_csv(f) for f in csv_files]
             if not dataframes:
                 return
                 
@@ -170,10 +170,6 @@ class PostureApp:
             X = df.drop('label', axis=1)
             y = df['label']
 
-            # Ensure we have both classes before fitting
-            if len(np.unique(y)) < 2:
-                print("Need data for both 'Good' and 'Slouch' states before training.")
-                return
 
             self.model = RandomForestClassifier(n_estimators=100, random_state=42)
             self.model.fit(X, y)
@@ -210,11 +206,25 @@ class PostureApp:
         relevant_indices = {0, 11, 12}
         connections = [(11, 12), (0, 11), (0, 12)]
 
+        target_fps = 30
+        frame_duration = 1.0 / target_fps
+
+        last_valid_frame = None
+
         while self.running:
+            start_frame_time = time.time()
+
             ret, frame = self.cap.read()
-            if not ret:
-                time.sleep(0.03)
-                continue
+            if not ret or frame is None:
+                if last_valid_frame is not None:
+                    # Duplicate the last good frame so the UI never displays a black void
+                    frame = last_valid_frame.copy()
+                else:
+                    # If we don't even have a first frame yet, wait patiently
+                    time.sleep(0.01)
+                    continue
+            else:
+                last_valid_frame = frame.copy()
 
             frame = cv2.flip(frame, 1)
             h, w, _ = frame.shape
@@ -222,7 +232,12 @@ class PostureApp:
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
             timestamp_ms = int((time.time() - self.start_time) * 1000)
-            result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
+
+            try:
+                result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
+            except Exception as e:
+                print(f"MediaPipe inference skip: {e}")
+                result = None
 
             if result.pose_landmarks:
                 landmarks = result.pose_landmarks[0]
@@ -270,9 +285,14 @@ class PostureApp:
             if self.running:
                 self.cam_label.img_tk = img_tk
                 self.cam_label.config(image=img_tk)
+                self.cam_label.image = img_tk  # <-- This stops garbage collection on the widget
+                self.current_frame_ref = img_tk # <-- This double-locks it in the class instance
 
-            # Prevent thread from resource starving out GUI execution clock ticks
-            time.sleep(0.01)
+            # Dynamic Throttling: Calculate how long processing took 
+            # and sleep only for the remaining time left in the frame window.
+            elapsed = time.time() - start_frame_time
+            sleep_time = max(0.001, frame_duration - elapsed)
+            time.sleep(sleep_time)
 
     def on_close(self):
         self.running = False
