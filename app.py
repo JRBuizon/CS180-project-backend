@@ -140,6 +140,13 @@ class PostureApp:
                   bg="#313244", fg="#cdd6f4", width=12, command=self.show_session_logs
                   ).pack(side=tk.LEFT, padx=10)
 
+        exit_frame = tk.Frame(self.home_frame, bg="#1e1e2e")
+        exit_frame.pack(pady=(0, 40))
+
+        tk.Button(exit_frame, text="Exit", font=("Arial", 11),
+                  bg="#f38ba8", fg="#11111b", width=12, command=self.on_close
+                  ).pack()
+
         # ===================== Session Logs Page =====================
         self.session_logs_frame = tk.Frame(self.page_container, bg="#1e1e2e")
         session_top = tk.Frame(self.session_logs_frame, bg="#1e1e2e")
