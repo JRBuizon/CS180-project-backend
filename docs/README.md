@@ -17,7 +17,9 @@ CS180-project-backend/
 ├── posture_data_csv/          # Directory for labeled training data CSVs
 │   ├── posture_data.csv
 │   ├── posture_data(1).csv
-│   └── posture_data(2).csv
+│   └── posture_data(2).csv  
+├── posture_logs/              # Directory for session history JSON logs
+│   └── session_history.json
 ├── posture_models/            # Saved model weight files (.pkl + .pkl.bkp backups)
 ├── .gitignore                 # Ignores cs180/ directory
 └── docs/
@@ -86,6 +88,15 @@ From landmarks, 3 numerical features are computed:
 - If model predicts `1`: shows "SLOUCH ALERT" (red)
 - **Rolling buffer**: A 15-frame prediction history uses majority voting to smooth out flickering classifications
 - **Thread-safe UI updates**: `update_cam_label` helper uses `window.after(0, ...)` to safely push frames to the Tkinter main thread
+
+### Session Tracking & Alerts
+
+The application tracks session-specific metrics and provides real-time alerts for prolonged slouching.
+
+- **Session Metrics**: `total_alerts`, `good_posture_duration`, `bad_posture_duration` are recorded.
+- **Slouch Detection**: If slouching is detected continuously for `max_slouch_seconds` (default 10s), an alert is triggered.
+- **Alert Mechanism**: A `messagebox.showwarning` popup is displayed to remind the user to correct their posture.
+- **Session Summary**: When the monitoring session ends (by returning to the home page or closing the app), a summary of the session (`session_date`, `total_duration`, `good_posture_duration`, `bad_posture_duration`, `total_slouch_alerts`, `trained_this_session`) is saved to `posture_logs/session_history.json`.
 
 ### UI Layout
 
@@ -173,8 +184,9 @@ head_forward,spine_angle,shoulder_tilt,label
 
 1. **Startup**: Downloads pose model if missing, loads existing CSV data and/or `.pkl` model weights, opens **home page** — camera stays off.
 2. **Home page**: User sees title, "START SESSION" button, and placeholder Settings/Logs buttons. Clicking "START SESSION" switches to monitoring.
-3. **Monitoring page**: Camera initializes, video loop starts. For each frame → MediaPipe detects 33 pose landmarks → extracts 3 geometric features → renders stick figure on camera feed → features fed into trained RandomForest → rolling 15-frame majority vote stabilizes prediction → UI updates with posture status.
+3. **Monitoring page**: Camera initializes, video loop starts. For each frame → MediaPipe detects 33 pose landmarks → extracts 3 geometric features → renders stick figure on camera feed → features fed into trained RandomForest → rolling 15-frame majority vote stabilizes prediction → UI updates with posture status. If slouching persists for `max_slouch_seconds`, a warning popup is triggered.
 4. **Data collection loop**: User presses G (GOOD) or S (SLOUCH) to capture labeled snapshots → data appended to CSV → in-memory model immediately retrained via `_train_in_memory()`. Click "📦 EXPORT MODEL WEIGHTS" to persist the current model to disk as a `.pkl` file.
+5. **Session End**: Upon returning to the home page or closing the application, a summary of the session's posture metrics (good/bad posture duration, total alerts, trained in session status) is saved to `posture_logs/session_history.json`.
 
 ---
 
@@ -199,3 +211,6 @@ head_forward,spine_angle,shoulder_tilt,label
 - **Explicit export only**: The "📦 EXPORT MODEL WEIGHTS" button is the sole way to write a `.pkl` to disk. On startup, the latest `.pkl` is loaded; if none exists, `train_model_from_local_data()` trains and exports one. Old `.pkl` files are renamed to `.pkl.bkp` on each export, preserving all backups.
 - **MediaPipe VIDEO mode**: Uses timestamp-based tracking for smoother temporal detection
 - **Color palette**: Catppuccin Mocha-inspired dark theme. Skeleton lines rendered in tan `(226, 214, 180)`, joint dots in blue `(135, 180, 249)`.
+- **Session Tracking & JSON Logging**: Comprehensive session metrics (good/bad posture duration, total alerts, etc.) are tracked and saved to a JSON log file on session conclusion.
+- **Time-based Slouch Alerts**: A configurable `max_slouch_seconds` threshold triggers a desktop popup to alert users of prolonged poor posture, with a mechanism to prevent repetitive alerts.
+- **`trained_this_session` flag**: A flag to indicate if the model was trained during the current session, useful for session summary and analytics.

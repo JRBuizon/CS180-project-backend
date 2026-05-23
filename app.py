@@ -9,6 +9,7 @@ from PIL import Image, ImageTk
 import threading
 import numpy as np
 import pandas as pd
+import json
 
 import mediapipe as mp
 from mediapipe.tasks import python
@@ -41,6 +42,13 @@ class PostureApp:
         self.last_state_timestamp = None
         self.current_session_state = None  # Tracks 0 for good, 1 for bad
         
+        # --- Active UI References & Context ---
+        self.active_cam_label = None
+        self.active_head_lbl = None
+        self.active_spine_lbl = None
+        self.active_status_lbl = None
+        self.session_context = None  # "monitoring" or "settings"
+        
         # --- Rolling Buffer for Posture Stabilization ---
         self.prediction_history = []
         self.buffer_size = 15  # Tracks last 15 frames for majority voting
@@ -48,7 +56,7 @@ class PostureApp:
         # --- Time-based Alert Tracking ---
         self.slouch_start_time = None
         self.alertpopup_active = False       # Flag to prevent multiple popups from staking up
-        self.max_slouch_seconds = 10    # Time threshold before triggering an alert
+        self.max_slouch_seconds = self.load_settings()    # Time threshold before triggering an alert Sourced from settings file
         
         # Download MediaPipe task file if missing
         self.model_path = "pose_landmarker.task"
@@ -125,7 +133,7 @@ class PostureApp:
         btn_frame.pack(pady=40)
 
         tk.Button(btn_frame, text="Settings", font=("Arial", 11),
-                  bg="#313244", fg="#cdd6f4", width=12, command=lambda: None
+                  bg="#313244", fg="#cdd6f4", width=12, command=self.show_settings
                   ).pack(side=tk.LEFT, padx=10)
 
         tk.Button(btn_frame, text="Logs", font=("Arial", 11),
@@ -148,8 +156,8 @@ class PostureApp:
         self.right_frame.pack_propagate(False)
 
         # Back to Home Button
-        tk.Button(self.right_frame, text="← Back to Home",
-                  font=("Arial", 10, "bold"), bg="#45475a", fg="#cdd6f4",
+        tk.Button(self.right_frame, text="⏹ End Session",
+                  font=("Arial", 10, "bold"), bg="#f38ba8", fg="#11111b",
                   command=self.show_home
                   ).pack(fill=tk.X, padx=15, pady=(15, 5))
 
@@ -192,18 +200,120 @@ class PostureApp:
                   ).pack(fill=tk.X, pady=4)
 
         # Export Action Button
-        tk.Button(self.right_frame, text="📦 EXPORT MODEL WEIGHTS",
+        tk.Button(self.right_frame, text="📦 Update Model",
                   bg="#fab387", fg="#11111b", font=("Arial", 12, "bold"),
                   command=self.export_model_weights
                   ).pack(fill=tk.X, padx=15, pady=20)
 
+        # ===================== Settings Page =====================
+        self.settings_frame = tk.Frame(self.page_container, bg="#1e1e2e")
+
+        # Left Panel - Camera Feed Calibration
+        self.settings_left_frame = tk.Frame(self.settings_frame, bg="#1e1e2e")
+        self.settings_left_frame.pack(side=tk.LEFT, padx=20, pady=20, fill=tk.BOTH, expand=True)
+
+        self.settings_cam_label = tk.Label(self.settings_left_frame, bg="#313244", width=640, height=480)
+        self.settings_cam_label.pack(fill=tk.BOTH, expand=True)
+
+        # Right Panel - Configuration Center
+        self.settings_right_frame = tk.Frame(self.settings_frame, bg="#181825", width=300)
+        self.settings_right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 20), pady=20)
+        self.settings_right_frame.pack_propagate(False)
+
+        # Back to Home Button
+        tk.Button(self.settings_right_frame, text="← Back to Home",
+                  font=("Arial", 10, "bold"), bg="#45475a", fg="#cdd6f4",
+                  command=self.show_home
+                  ).pack(fill=tk.X, padx=15, pady=(15, 5))
+
+        # Status Display
+        tk.Label(self.settings_right_frame, text="POSTURE STATUS",
+                 font=("Arial", 14, "bold"), bg="#181825", fg="#a6adc8"
+                 ).pack(pady=(20, 5))
+        self.settings_status_lbl = tk.Label(self.settings_right_frame, text="NO MODEL TRAINED",
+                                            font=("Arial", 18, "bold"),
+                                            bg="#313244", fg="#f38ba8", width=18, pady=10)
+        self.settings_status_lbl.pack(pady=10)
+
+        # Live Metrics
+        self.settings_metrics_frame = tk.LabelFrame(self.settings_right_frame, text=" Live Metrics ",
+                                                   bg="#181825", fg="#cdd6f4",
+                                                   font=("Arial", 10, "bold"), padx=10, pady=10)
+        self.settings_metrics_frame.pack(fill=tk.X, padx=15, pady=15)
+
+        self.settings_head_lbl = ttk.Label(self.settings_metrics_frame, text="Head Forward: --")
+        self.settings_head_lbl.pack(anchor="w", pady=2)
+        self.settings_spine_lbl = ttk.Label(self.settings_metrics_frame, text="Spine Angle: --")
+        self.settings_spine_lbl.pack(anchor="w", pady=2)
+
+        # Configurable Alert Timer Section
+        self.alert_timer_frame = tk.LabelFrame(self.settings_right_frame, text=" Slouch Threshold ",
+                                               bg="#181825", fg="#cdd6f4",
+                                               font=("Arial", 10, "bold"), padx=10, pady=10)
+        self.alert_timer_frame.pack(fill=tk.X, padx=15, pady=10)
+
+        ttk.Label(self.alert_timer_frame, text="Delay (seconds):").pack(side=tk.LEFT, padx=5)
+        self.settings_delay_var = tk.StringVar()
+        self.settings_spinbox = ttk.Spinbox(
+            self.alert_timer_frame,
+            from_=1, to=300, increment=1,
+            textvariable=self.settings_delay_var,
+            width=8,
+            command=self.on_spinbox_change
+        )
+        self.settings_spinbox.pack(side=tk.LEFT, padx=5)
+        self.settings_spinbox.bind("<FocusOut>", lambda e: self.on_spinbox_change())
+        self.settings_spinbox.bind("<Return>", lambda e: self.on_spinbox_change())
+
+        # Data Collection Section
+        self.settings_train_frame = tk.LabelFrame(self.settings_right_frame, text=" Data Collection ",
+                                                 bg="#181825", fg="#cdd6f4",
+                                                 font=("Arial", 10, "bold"), padx=10, pady=10)
+        self.settings_train_frame.pack(fill=tk.X, padx=15, pady=10)
+
+        ttk.Label(self.settings_train_frame, text="Collect calibration snapshots:").pack(pady=5)
+        tk.Button(self.settings_train_frame, text="Capture GOOD (G)",
+                  bg="#a6e3a1", fg="#11111b", font=("Arial", 10, "bold"),
+                  command=lambda: self.save_snapshot(0)
+                  ).pack(fill=tk.X, pady=4)
+
+        tk.Button(self.settings_train_frame, text="Capture SLOUCH (S)",
+                  bg="#f38ba8", fg="#11111b", font=("Arial", 10, "bold"),
+                  command=lambda: self.save_snapshot(1)
+                  ).pack(fill=tk.X, pady=4)
+
+        # Export Action Button
+        tk.Button(self.settings_right_frame, text="📦 Update Model",
+                  bg="#fab387", fg="#11111b", font=("Arial", 12, "bold"),
+                  command=self.export_model_weights
+                  ).pack(fill=tk.X, padx=15, pady=5)
+
+        tk.Button(self.settings_right_frame, text="💾 Save Settings",
+                  bg="#a6e3a1", fg="#11111b", font=("Arial", 12, "bold"),
+                  command=self.save_settings_from_spinbox
+                  ).pack(fill=tk.X, padx=15, pady=(5, 20))
+
+    def on_spinbox_change(self):
+        pass
+
+    def save_settings_from_spinbox(self):
+        try:
+            val = int(self.settings_delay_var.get())
+            if val < 1:
+                val = 1
+            self.save_settings(val)
+            self.show_home()
+        except ValueError:
+            pass
+
     def show_home(self):
         # Save session tracking statistics before winding down the interface
-        if hasattr(self, 'running') and self.running:
+        if hasattr(self, 'running') and self.running and self.session_context == "monitoring":
             self.save_session_summary_json()
         
         self.stop_camera()
         self.monitoring_frame.pack_forget()
+        self.settings_frame.pack_forget()
         self.home_frame.pack(fill=tk.BOTH, expand=True)
         self.window.unbind('<g>')
         self.window.unbind('<s>')
@@ -211,22 +321,47 @@ class PostureApp:
     def show_monitoring(self):
         self.home_frame.pack_forget()
         self.monitoring_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.active_cam_label = self.cam_label
+        self.active_head_lbl = self.head_lbl
+        self.active_spine_lbl = self.spine_lbl
+        self.active_status_lbl = self.status_lbl
+        
         self.window.bind('<g>', lambda e: self.save_snapshot(0))
         self.window.bind('<s>', lambda e: self.save_snapshot(1))
-        self.start_camera()
+        self.start_camera(context="monitoring")
 
-    def start_camera(self):
+    def show_settings(self):
+        self.home_frame.pack_forget()
+        self.settings_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.active_cam_label = getattr(self, 'settings_cam_label', None)
+        self.active_head_lbl = getattr(self, 'settings_head_lbl', None)
+        self.active_spine_lbl = getattr(self, 'settings_spine_lbl', None)
+        self.active_status_lbl = getattr(self, 'settings_status_lbl', None)
+        
+        saved_val = self.load_settings()
+        self.settings_delay_var.set(str(saved_val))
+        
+        self.window.bind('<g>', lambda e: self.save_snapshot(0))
+        self.window.bind('<s>', lambda e: self.save_snapshot(1))
+        self.start_camera(context="settings")
+
+    def start_camera(self, context="monitoring"):
         self.cap = cv2.VideoCapture(0)
         self.start_time = time.time()
         
-        # --- Initialize Session Statistics ---
-        self.session_start_wall_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.total_alerts = 0
-        self.good_posture_duration = 0.0
-        self.bad_posture_duration = 0.0
-        self.last_state_timestamp = time.time()
-        self.current_session_state = None
-        self.trained_this_session = False
+        self.session_context = context
+        
+        if context == "monitoring":
+            # --- Initialize Session Statistics ---
+            self.session_start_wall_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.total_alerts = 0
+            self.good_posture_duration = 0.0
+            self.bad_posture_duration = 0.0
+            self.last_state_timestamp = time.time()
+            self.current_session_state = None
+            self.trained_this_session = False
         
         if self.landmarker is None:
             self.landmarker = vision.PoseLandmarker.create_from_options(self.options)
@@ -271,6 +406,27 @@ class PostureApp:
             "shoulder_tilt":  shoulder_tilt,
         }
 
+    def load_settings(self):
+        """Loads settings from settings.json or initializes a default if missing."""
+        self.settings_filepath = "settings.json"
+        default_delay = 10
+        if os.path.exists(self.settings_filepath):
+            try:
+                with open(self.settings_filepath, "r") as f:
+                    data = json.load(f)
+                    return data.get("max_slouch_seconds", default_delay)
+            except Exception:
+                pass
+        # Save default if file didn't exist or failed to load
+        self.save_settings(default_delay)
+        return default_delay
+
+    def save_settings(self, new_seconds):
+        """Saves current settings back to settings.json."""
+        self.max_slouch_seconds = new_seconds
+        with open("settings.json", "w") as f:
+            json.dump({"max_slouch_seconds": new_seconds}, f, indent=4)
+
     # --- Training Operations ---
     def train_model_from_local_data(self):
         # Look for all variations of files you specified
@@ -311,8 +467,8 @@ class PostureApp:
             print(f"Successfully trained local model on {len(df)} samples from {csv_files}!")
             
             # Flash UI visual confirmation if running
-            if hasattr(self, 'status_lbl'):
-                self.status_lbl.config(text="MODEL READY", fg="#a6e3a1")
+            if self.active_status_lbl and self.active_status_lbl.winfo_exists():
+                self.active_status_lbl.config(text="MODEL READY", fg="#a6e3a1")
         except Exception as e:
             print(f"Error parsing local CSV datasets: {e}")
 
@@ -340,8 +496,8 @@ class PostureApp:
 
             print(f"Trained in-memory model on {len(df)} samples from {csv_files}!")
 
-            if hasattr(self, 'status_lbl'):
-                self.status_lbl.config(text="MODEL READY", fg="#a6e3a1")
+            if self.active_status_lbl and self.active_status_lbl.winfo_exists():
+                self.active_status_lbl.config(text="MODEL READY", fg="#a6e3a1")
         except Exception as e:
             print(f"Error parsing local CSV datasets: {e}")
 
@@ -359,11 +515,11 @@ class PostureApp:
         joblib.dump(self.model, f"posture_models/posture_model_{timestamp}.pkl")
         print(f"Exported model to posture_models/posture_model_{timestamp}.pkl")
 
-        if hasattr(self, 'status_lbl'):
-            self.status_lbl.config(text="WEIGHTS EXPORTED", fg="#a6e3a1")
-            self.window.after(1500, lambda: self.status_lbl.config(
+        if self.active_status_lbl and self.active_status_lbl.winfo_exists():
+            self.active_status_lbl.config(text="WEIGHTS EXPORTED", fg="#a6e3a1")
+            self.window.after(1500, lambda: self.active_status_lbl.config(
                 text="MODEL READY" if self.is_trained else "NO MODEL TRAINED"
-            ))
+            ) if self.active_status_lbl and self.active_status_lbl.winfo_exists() else None)
 
     def save_snapshot(self, label_val):
         if self.current_features is None:
@@ -382,9 +538,9 @@ class PostureApp:
             writer.writerows([row])
 
         # Soft UI temporary flash confirmation
-        current_bg = self.status_lbl.cget("bg")
-        self.status_lbl.config(bg="#fab387", text="SNAPSHOT + TRAINED")
-        self.window.after(400, lambda: self.status_lbl.config(bg=current_bg))
+        current_bg = self.active_status_lbl.cget("bg")
+        self.active_status_lbl.config(bg="#fab387", text="SNAPSHOT + TRAINED")
+        self.window.after(400, lambda: self.active_status_lbl.config(bg=current_bg) if self.active_status_lbl and self.active_status_lbl.winfo_exists() else None)
 
         # Retrain model immediately with updated data
         self._train_in_memory()
@@ -432,8 +588,8 @@ class PostureApp:
                     self.current_features = self.extract_features(landmarks)
                     
                     # Update numerical labels dynamically
-                    self.head_lbl.config(text=f"Head Displacement: {self.current_features['head_forward']:.3f}")
-                    self.spine_lbl.config(text=f"Vertebral Angle:  {self.current_features['spine_angle']:.1f}°")
+                    self.active_head_lbl.config(text=f"Head Displacement: {self.current_features['head_forward']:.3f}")
+                    self.active_spine_lbl.config(text=f"Vertebral Angle:  {self.current_features['spine_angle']:.1f}°")
 
                     if self.is_trained and self.model:
                         feat_df = pd.DataFrame([self.current_features])
@@ -466,14 +622,14 @@ class PostureApp:
                         
                         # 3. Update UI states using the clean, smoothed result
                         if stabilized_prediction == 0:
-                            self.status_lbl.config(text="GOOD POSTURE", fg="#a6e3a1", bg="#313244")
+                            self.active_status_lbl.config(text="GOOD POSTURE", fg="#a6e3a1", bg="#313244")
                             if hasattr(self, 'status_card'): 
                                 self.status_card.config(highlightbackground="#a6e3a1")
                             
                             # Reset slouch time tracking since posture is good
                             self.slouch_start_time = None
                         else:
-                            self.status_lbl.config(text="SLOUCH ALERT", fg="#f38ba8", bg="#512530")
+                            self.active_status_lbl.config(text="SLOUCH ALERT", fg="#f38ba8", bg="#512530")
                             if hasattr(self, 'status_card'): 
                                 self.status_card.config(highlightbackground="#f38ba8")
                             
@@ -487,11 +643,10 @@ class PostureApp:
                                 # If they breach the limit and a popup isn't already active, trigger alert
                                 if elapsed_slouch >= self.max_slouch_seconds:
                                     self.alertpopup_active = True
-                                    self.total_alerts += 1
-                                    # Reset tracking clock so it doesn't loop fire while the box is open
-                                    self.slouch_start_time = None 
-                                    # Safely pass popup command back to Tkinter's main thread
-                                    self.window.after(0, self.trigger_alert_popup)
+                                    self.slouch_start_time = None
+                                    if self.session_context == "monitoring":
+                                        self.total_alerts += 1
+                                        self.window.after(0, self.trigger_alert_popup)
                 else:
                     self.current_features = None
                     self.last_state_timestamp = time.time()
@@ -514,8 +669,8 @@ class PostureApp:
     def update_cam_label(self, img_tk):
         """Helper to ensure image assignment happens safely on Tkinter's main thread"""
         if self.running:
-            self.cam_label.img_tk = img_tk
-            self.cam_label.config(image=img_tk)
+            self.active_cam_label.img_tk = img_tk
+            self.active_cam_label.config(image=img_tk)
 
     def trigger_alert_popup(self):
         """Displays a thread-safe warning popup on the primary desktop layer"""
