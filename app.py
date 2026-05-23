@@ -201,6 +201,8 @@ class PostureApp:
     def start_camera(self):
         self.cap = cv2.VideoCapture(0)
         self.start_time = time.time()
+        if self.landmarker is None:
+            self.landmarker = vision.PoseLandmarker.create_from_options(self.options)
         self.running = True
         self.video_thread = threading.Thread(target=self.video_loop, daemon=True)
         self.video_thread.start()
@@ -210,6 +212,9 @@ class PostureApp:
         if hasattr(self, 'cap') and self.cap is not None:
             self.cap.release()
             self.cap = None
+        if hasattr(self, 'landmarker') and self.landmarker is not None:
+            self.landmarker.close()
+            self.landmarker = None
 
     # --- Geometric Math Utilities ---
     def get_angle(self, a, b, c):
@@ -450,7 +455,8 @@ class PostureApp:
 
     def on_close(self):
         self.stop_camera()
-        self.landmarker.close()
+        if hasattr(self, 'landmarker') and self.landmarker is not None:
+            self.landmarker.close()
         self.window.destroy()
 
 if __name__ == "__main__":
