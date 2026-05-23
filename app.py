@@ -115,7 +115,7 @@ class PostureApp:
         self.spine_lbl.pack(anchor="w", pady=2)
 
         # Interactive Training Section
-        self.train_frame = tk.LabelFrame(self.right_frame, text=" Local Model Training ", bg="#181825", fg="#cdd6f4", font=("Arial", 10, "bold"), padx=10, pady=10)
+        self.train_frame = tk.LabelFrame(self.right_frame, text=" Data Collection ", bg="#181825", fg="#cdd6f4", font=("Arial", 10, "bold"), padx=10, pady=10)
         self.train_frame.pack(fill=tk.X, padx=15, pady=15)
 
         ttk.Label(self.train_frame, text="Collect new snapshots:").pack(pady=5)
@@ -126,9 +126,9 @@ class PostureApp:
         btn_slouch = tk.Button(self.train_frame, text="Capture SLOUCH (S)", bg="#f38ba8", fg="#11111b", font=("Arial", 10, "bold"), command=lambda: self.save_snapshot(1))
         btn_slouch.pack(fill=tk.X, pady=4)
 
-        # Retrain Action Button
-        self.retrain_btn = tk.Button(self.right_frame, text="⚡ RETRAIN MODEL", bg="#fab387", fg="#11111b", font=("Arial", 12, "bold"), command=self.train_model_from_local_data)
-        self.retrain_btn.pack(fill=tk.X, padx=15, pady=20)
+        # Export Action Button
+        self.export_btn = tk.Button(self.right_frame, text="📦 EXPORT MODEL WEIGHTS", bg="#fab387", fg="#11111b", font=("Arial", 12, "bold"), command=self.export_model_weights)
+        self.export_btn.pack(fill=tk.X, padx=15, pady=20)
 
         # Bind hotkeys matching your old script layout
         self.window.bind('<g>', lambda e: self.save_snapshot(0))
@@ -207,6 +207,55 @@ class PostureApp:
         except Exception as e:
             print(f"Error parsing local CSV datasets: {e}")
 
+    def _train_in_memory(self):
+        csv_files = glob.glob("posture_data_csv/posture_data*.csv")
+        if not csv_files:
+            self.is_trained = False
+            return
+
+        try:
+            dataframes = [pd.read_csv(f) for f in csv_files]
+            if not dataframes:
+                return
+
+            df = pd.concat(dataframes, ignore_index=True)
+            if df.empty or 'label' not in df.columns:
+                return
+
+            X = df.drop('label', axis=1)
+            y = df['label']
+
+            self.model = RandomForestClassifier(n_estimators=100, random_state=42)
+            self.model.fit(X, y)
+            self.is_trained = True
+
+            print(f"Trained in-memory model on {len(df)} samples from {csv_files}!")
+
+            if hasattr(self, 'status_lbl'):
+                self.status_lbl.config(text="MODEL READY", fg="#a6e3a1")
+        except Exception as e:
+            print(f"Error parsing local CSV datasets: {e}")
+
+    def export_model_weights(self):
+        if not self.is_trained or self.model is None:
+            print("No model to export — collect data first.")
+            return
+
+        os.makedirs("posture_models", exist_ok=True)
+
+        for old_pkl in glob.glob("posture_models/posture_model_*.pkl"):
+            os.rename(old_pkl, old_pkl + ".bkp")
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        joblib.dump(self.model, f"posture_models/posture_model_{timestamp}.pkl")
+        print(f"Exported model to posture_models/posture_model_{timestamp}.pkl")
+
+        if hasattr(self, 'status_lbl'):
+            self.status_lbl.config(text="WEIGHTS EXPORTED", fg="#a6e3a1")
+            self.window.after(1500, lambda: self.status_lbl.config(
+                text="MODEL READY" if self.is_trained else "NO MODEL TRAINED"
+            ))
+
     def save_snapshot(self, label_val):
         if self.current_features is None:
             return
@@ -223,8 +272,11 @@ class PostureApp:
 
         # Soft UI temporary flash confirmation
         current_bg = self.status_lbl.cget("bg")
-        self.status_lbl.config(bg="#fab387", text="SNAPSHOT SAVED")
+        self.status_lbl.config(bg="#fab387", text="SNAPSHOT + TRAINED")
         self.window.after(400, lambda: self.status_lbl.config(bg=current_bg))
+
+        # Retrain model immediately with updated data
+        self._train_in_memory()
 
     # --- Core Video Processing Core ---
     def video_loop(self):
