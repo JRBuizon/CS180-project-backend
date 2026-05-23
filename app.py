@@ -33,9 +33,22 @@ class PostureApp:
         self.current_features = None
         self.csv_filename = "posture_data_csv/posture_data.csv"
         
+        # --- Session Summary Metrics ---
+        self.session_start_wall_time = None
+        self.total_alerts = 0
+        self.good_posture_duration = 0.0
+        self.bad_posture_duration = 0.0
+        self.last_state_timestamp = None
+        self.current_session_state = None  # Tracks 0 for good, 1 for bad
+        
         # --- Rolling Buffer for Posture Stabilization ---
         self.prediction_history = []
         self.buffer_size = 15  # Tracks last 15 frames for majority voting
+        
+        # --- Time-based Alert Tracking ---
+        self.slouch_start_time = None
+        self.alertpopup_active = False       # Flag to prevent multiple popups from staking up
+        self.max_slouch_seconds = 10    # Time threshold before triggering an alert
         
         # Download MediaPipe task file if missing
         self.model_path = "pose_landmarker.task"
@@ -185,6 +198,10 @@ class PostureApp:
                   ).pack(fill=tk.X, padx=15, pady=20)
 
     def show_home(self):
+        # Save session tracking statistics before winding down the interface
+        if hasattr(self, 'running') and self.running:
+            self.save_session_summary_json()
+        
         self.stop_camera()
         self.monitoring_frame.pack_forget()
         self.home_frame.pack(fill=tk.BOTH, expand=True)
@@ -201,6 +218,16 @@ class PostureApp:
     def start_camera(self):
         self.cap = cv2.VideoCapture(0)
         self.start_time = time.time()
+        
+        # --- Initialize Session Statistics ---
+        self.session_start_wall_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.total_alerts = 0
+        self.good_posture_duration = 0.0
+        self.bad_posture_duration = 0.0
+        self.last_state_timestamp = time.time()
+        self.current_session_state = None
+        self.trained_this_session = False
+        
         if self.landmarker is None:
             self.landmarker = vision.PoseLandmarker.create_from_options(self.options)
         self.running = True
@@ -341,6 +368,8 @@ class PostureApp:
     def save_snapshot(self, label_val):
         if self.current_features is None:
             return
+        
+        self.trained_this_session = True
             
         file_exists = os.path.exists(self.csv_filename)
         row = self.current_features.copy()
@@ -421,19 +450,54 @@ class PostureApp:
                         # (Takes whichever label appears most frequently)
                         stabilized_prediction = max(set(self.prediction_history), key=self.prediction_history.count)
                         
+
+                        # --- Data Recording ---
+                        current_time = time.time()
+                        if self.last_state_timestamp is not None:
+                            elapsed_chunk = current_time - self.last_state_timestamp
+                            if self.current_session_state == 0:
+                                self.good_posture_duration += elapsed_chunk
+                            elif self.current_session_state == 1:
+                                self.bad_posture_duration += elapsed_chunk
+                        
+                        # Set current state context for the next cycle calculation
+                        self.current_session_state = stabilized_prediction
+                        self.last_state_timestamp = current_time
+                        
                         # 3. Update UI states using the clean, smoothed result
                         if stabilized_prediction == 0:
                             self.status_lbl.config(text="GOOD POSTURE", fg="#a6e3a1", bg="#313244")
                             if hasattr(self, 'status_card'): 
                                 self.status_card.config(highlightbackground="#a6e3a1")
+                            
+                            # Reset slouch time tracking since posture is good
+                            self.slouch_start_time = None
                         else:
                             self.status_lbl.config(text="SLOUCH ALERT", fg="#f38ba8", bg="#512530")
                             if hasattr(self, 'status_card'): 
                                 self.status_card.config(highlightbackground="#f38ba8")
+                            
+                            # Start clock if this is the beginning of a slouch stretch
+                            if self.slouch_start_time is None:
+                                self.slouch_start_time = time.time()
+                            elif not self.alertpopup_active:
+                                # Calculate continuous elapsed slouch time
+                                elapsed_slouch = time.time() - self.slouch_start_time
+                                
+                                # If they breach the limit and a popup isn't already active, trigger alert
+                                if elapsed_slouch >= self.max_slouch_seconds:
+                                    self.alertpopup_active = True
+                                    self.total_alerts += 1
+                                    # Reset tracking clock so it doesn't loop fire while the box is open
+                                    self.slouch_start_time = None 
+                                    # Safely pass popup command back to Tkinter's main thread
+                                    self.window.after(0, self.trigger_alert_popup)
                 else:
                     self.current_features = None
+                    self.last_state_timestamp = time.time()
             else:
                 self.current_features = None
+                self.last_state_timestamp = time.time()
 
             # 3. Double-buffered UI rendering: Convert the completed frame
             img_rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
@@ -453,10 +517,74 @@ class PostureApp:
             self.cam_label.img_tk = img_tk
             self.cam_label.config(image=img_tk)
 
+    def trigger_alert_popup(self):
+        """Displays a thread-safe warning popup on the primary desktop layer"""
+        self.window.bell() 
+        
+        messagebox.showwarning(
+            "Posture Reminder", 
+            f"You have been slouching for over {self.max_slouch_seconds} seconds!\n"
+        )
+        
+        # When the user clicks "OK", lower the flag so the system can watch for future slouch windows
+        self.alertpopup_active = False
+
+    def save_session_summary_json(self):
+        """Finalizes time tracking variables and commits the session metrics to a JSON log"""
+        if self.session_start_wall_time is None:
+            return
+
+        # Factor in the final remaining time block right up to the close action
+        current_time = time.time()
+        if self.last_state_timestamp is not None:
+            elapsed_chunk = current_time - self.last_state_timestamp
+            if self.current_session_state == 0:
+                self.good_posture_duration += elapsed_chunk
+            elif self.current_session_state == 1:
+                self.bad_posture_duration += elapsed_chunk
+
+        total_session_duration = self.good_posture_duration + self.bad_posture_duration
+
+        # Guard against saving empty metrics files if the session was immediately skipped
+        if total_session_duration < 1.0:
+            return
+
+        session_payload = {
+            "session_date": self.session_start_wall_time,
+            "total_duration": round(total_session_duration, 2),
+            "good_posture_duration": round(self.good_posture_duration, 2),
+            "bad_posture_duration": round(self.bad_posture_duration, 2),
+            "total_slouch_alerts": self.total_alerts,
+            "trained_this_session": self.trained_this_session
+        }
+
+        log_directory = "posture_logs"
+        log_filepath = os.path.join(log_directory, "session_history.json")
+        os.makedirs(log_directory, exist_ok=True)
+
+        import json
+        history_records = []
+        
+        # If history ledger already exists, read old logs to append new entry cleanly
+        if os.path.exists(log_filepath):
+            try:
+                with open(log_filepath, "r") as json_file:
+                    history_records = json.load(json_file)
+                    if not isinstance(history_records, list):
+                        history_records = []
+            except Exception:
+                history_records = []
+
+        history_records.append(session_payload)
+
+        with open(log_filepath, "w") as json_file:
+            json.dump(history_records, json_file, indent=4)
+        print(f"Session data successfully compiled and saved to {log_filepath}")
+
     def on_close(self):
+        if hasattr(self, 'running') and self.running:
+            self.save_session_summary_json()
         self.stop_camera()
-        if hasattr(self, 'landmarker') and self.landmarker is not None:
-            self.landmarker.close()
         self.window.destroy()
 
 if __name__ == "__main__":
