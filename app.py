@@ -15,6 +15,9 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 import urllib.request
 
+from datetime import datetime
+import joblib
+
 from sklearn.ensemble import RandomForestClassifier
 
 class PostureApp:
@@ -28,7 +31,7 @@ class PostureApp:
         self.model = None
         self.is_trained = False
         self.current_features = None
-        self.csv_filename = "posture_data.csv"
+        self.csv_filename = "posture_data_csv/posture_data.csv"
         
         # Download MediaPipe task file if missing
         self.model_path = "pose_landmarker.task"
@@ -39,8 +42,17 @@ class PostureApp:
                 self.model_path
             )
 
-        # Try to build initial model from existing files
-        self.train_model_from_local_data()
+        # Load existing model weights or train from CSVs
+        pkl_files = sorted(
+            glob.glob("posture_models/posture_model_*.pkl"),
+            key=os.path.getctime
+        )
+        if pkl_files:
+            self.model = joblib.load(pkl_files[-1])
+            self.is_trained = True
+            print(f"Loaded model from {pkl_files[-1]}")
+        else:
+            self.train_model_from_local_data()
 
         # --- MediaPipe Setup ---
         base_options = python.BaseOptions(model_asset_path=self.model_path)
@@ -174,6 +186,19 @@ class PostureApp:
             self.model = RandomForestClassifier(n_estimators=100, random_state=42)
             self.model.fit(X, y)
             self.is_trained = True
+
+            # Ensure models directory exists
+            os.makedirs("posture_models", exist_ok=True)
+
+            # Backup all existing .pkl files before saving new one
+            for old_pkl in glob.glob("posture_models/posture_model_*.pkl"):
+                os.rename(old_pkl, old_pkl + ".bkp")
+
+            # Save new model with creation timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            joblib.dump(self.model, f"posture_models/posture_model_{timestamp}.pkl")
+            print(f"Saved model to posture_models/posture_model_{timestamp}.pkl")
+
             print(f"Successfully trained local model on {len(df)} samples from {csv_files}!")
             
             # Flash UI visual confirmation if running
