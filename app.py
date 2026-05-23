@@ -153,7 +153,7 @@ class PostureApp:
     # --- Training Operations ---
     def train_model_from_local_data(self):
         # Look for all variations of files you specified
-        csv_files = glob.glob("posture_data*.csv")
+        csv_files = glob.glob("posture_data_csv/posture_data*.csv")
         if not csv_files:
             self.is_trained = False
             return
