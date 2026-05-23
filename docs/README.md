@@ -10,7 +10,7 @@ A desktop application that uses computer vision + machine learning to detect and
 
 ```
 CS180-project-backend/
-├── app.py                  # Main GUI application (380 lines)
+├── app.py                  # Main GUI application (459 lines)
 ├── test.py                 # CLI data-collection test script (152 lines)
 ├── requirements.txt        # Python dependencies
 ├── pose_landmarker.task       # MediaPipe pose estimation model (auto-downloaded)

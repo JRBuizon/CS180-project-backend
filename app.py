@@ -72,14 +72,8 @@ class PostureApp:
         # --- UI Layout ---
         self.setup_styles()
         self.create_widgets()
-
-        # --- Camera Thread ---
-        self.cap = cv2.VideoCapture(0)
-        self.start_time = time.time()
-        self.running = True
-        
-        self.video_thread = threading.Thread(target=self.video_loop, daemon=True)
-        self.video_thread.start()
+        # Start on home page
+        self.show_home()
 
         # Handle window close cleanly
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -92,51 +86,130 @@ class PostureApp:
         style.map("TButton", background=[("active", "#b4befe")])
 
     def create_widgets(self):
+        # Page container — holds both home and monitoring pages
+        self.page_container = tk.Frame(self.window, bg="#1e1e2e")
+        self.page_container.pack(fill=tk.BOTH, expand=True)
+
+        # ===================== Home Page =====================
+        self.home_frame = tk.Frame(self.page_container, bg="#1e1e2e")
+
+        # Title Section
+        tk.Label(self.home_frame, text="Personal Posture Journal",
+                 font=("Arial", 28, "bold"), bg="#1e1e2e", fg="#cdd6f4"
+                 ).pack(pady=(120, 10))
+        tk.Label(self.home_frame, text="Real-time posture monitoring app",
+                 font=("Arial", 14), bg="#1e1e2e", fg="#a6adc8"
+                 ).pack(pady=(0, 60))
+
+        # Start Session Button
+        tk.Button(self.home_frame, text="START SESSION",
+                  font=("Arial", 16, "bold"), bg="#89b4fa", fg="#11111b",
+                  width=20, height=2, command=self.show_monitoring
+                  ).pack(pady=20)
+
+        # Placeholder Buttons Row
+        btn_frame = tk.Frame(self.home_frame, bg="#1e1e2e")
+        btn_frame.pack(pady=40)
+
+        tk.Button(btn_frame, text="Settings", font=("Arial", 11),
+                  bg="#313244", fg="#cdd6f4", width=12, command=lambda: None
+                  ).pack(side=tk.LEFT, padx=10)
+
+        tk.Button(btn_frame, text="Logs", font=("Arial", 11),
+                  bg="#313244", fg="#cdd6f4", width=12, command=lambda: None
+                  ).pack(side=tk.LEFT, padx=10)
+
+        # ===================== Monitoring Page =====================
+        self.monitoring_frame = tk.Frame(self.page_container, bg="#1e1e2e")
+
         # Left Panel - Camera Feed
-        self.left_frame = tk.Frame(self.window, bg="#1e1e2e")
+        self.left_frame = tk.Frame(self.monitoring_frame, bg="#1e1e2e")
         self.left_frame.pack(side=tk.LEFT, padx=20, pady=20, fill=tk.BOTH, expand=True)
 
         self.cam_label = tk.Label(self.left_frame, bg="#313244", width=640, height=480)
         self.cam_label.pack(fill=tk.BOTH, expand=True)
 
         # Right Panel - Control Center
-        self.right_frame = tk.Frame(self.window, bg="#181825", width=300)
+        self.right_frame = tk.Frame(self.monitoring_frame, bg="#181825", width=300)
         self.right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 20), pady=20)
         self.right_frame.pack_propagate(False)
 
+        # Back to Home Button
+        tk.Button(self.right_frame, text="← Back to Home",
+                  font=("Arial", 10, "bold"), bg="#45475a", fg="#cdd6f4",
+                  command=self.show_home
+                  ).pack(fill=tk.X, padx=15, pady=(15, 5))
+
         # Status Display
-        tk.Label(self.right_frame, text="POSTURE STATUS", font=("Arial", 14, "bold"), bg="#181825", fg="#a6adc8").pack(pady=(20, 5))
-        self.status_lbl = tk.Label(self.right_frame, text="NO MODEL TRAINED", font=("Arial", 18, "bold"), bg="#313244", fg="#f38ba8", width=18, pady=10)
+        tk.Label(self.right_frame, text="POSTURE STATUS",
+                 font=("Arial", 14, "bold"), bg="#181825", fg="#a6adc8"
+                 ).pack(pady=(20, 5))
+        self.status_lbl = tk.Label(self.right_frame, text="NO MODEL TRAINED",
+                                   font=("Arial", 18, "bold"),
+                                   bg="#313244", fg="#f38ba8", width=18, pady=10)
         self.status_lbl.pack(pady=10)
 
         # Live Metrics
-        self.metrics_frame = tk.LabelFrame(self.right_frame, text=" Live Metrics ", bg="#181825", fg="#cdd6f4", font=("Arial", 10, "bold"), padx=10, pady=10)
+        self.metrics_frame = tk.LabelFrame(self.right_frame, text=" Live Metrics ",
+                                           bg="#181825", fg="#cdd6f4",
+                                           font=("Arial", 10, "bold"), padx=10, pady=10)
         self.metrics_frame.pack(fill=tk.X, padx=15, pady=15)
-        
+
         self.head_lbl = ttk.Label(self.metrics_frame, text="Head Forward: --")
         self.head_lbl.pack(anchor="w", pady=2)
         self.spine_lbl = ttk.Label(self.metrics_frame, text="Spine Angle: --")
         self.spine_lbl.pack(anchor="w", pady=2)
 
-        # Interactive Training Section
-        self.train_frame = tk.LabelFrame(self.right_frame, text=" Data Collection ", bg="#181825", fg="#cdd6f4", font=("Arial", 10, "bold"), padx=10, pady=10)
+        # Data Collection Section
+        self.train_frame = tk.LabelFrame(self.right_frame, text=" Data Collection ",
+                                         bg="#181825", fg="#cdd6f4",
+                                         font=("Arial", 10, "bold"), padx=10, pady=10)
         self.train_frame.pack(fill=tk.X, padx=15, pady=15)
 
         ttk.Label(self.train_frame, text="Collect new snapshots:").pack(pady=5)
-        
-        btn_good = tk.Button(self.train_frame, text="Capture GOOD (G)", bg="#a6e3a1", fg="#11111b", font=("Arial", 10, "bold"), command=lambda: self.save_snapshot(0))
-        btn_good.pack(fill=tk.X, pady=4)
-        
-        btn_slouch = tk.Button(self.train_frame, text="Capture SLOUCH (S)", bg="#f38ba8", fg="#11111b", font=("Arial", 10, "bold"), command=lambda: self.save_snapshot(1))
-        btn_slouch.pack(fill=tk.X, pady=4)
+
+        tk.Button(self.train_frame, text="Capture GOOD (G)",
+                  bg="#a6e3a1", fg="#11111b", font=("Arial", 10, "bold"),
+                  command=lambda: self.save_snapshot(0)
+                  ).pack(fill=tk.X, pady=4)
+
+        tk.Button(self.train_frame, text="Capture SLOUCH (S)",
+                  bg="#f38ba8", fg="#11111b", font=("Arial", 10, "bold"),
+                  command=lambda: self.save_snapshot(1)
+                  ).pack(fill=tk.X, pady=4)
 
         # Export Action Button
-        self.export_btn = tk.Button(self.right_frame, text="📦 EXPORT MODEL WEIGHTS", bg="#fab387", fg="#11111b", font=("Arial", 12, "bold"), command=self.export_model_weights)
-        self.export_btn.pack(fill=tk.X, padx=15, pady=20)
+        tk.Button(self.right_frame, text="📦 EXPORT MODEL WEIGHTS",
+                  bg="#fab387", fg="#11111b", font=("Arial", 12, "bold"),
+                  command=self.export_model_weights
+                  ).pack(fill=tk.X, padx=15, pady=20)
 
-        # Bind hotkeys matching your old script layout
+    def show_home(self):
+        self.stop_camera()
+        self.monitoring_frame.pack_forget()
+        self.home_frame.pack(fill=tk.BOTH, expand=True)
+        self.window.unbind('<g>')
+        self.window.unbind('<s>')
+
+    def show_monitoring(self):
+        self.home_frame.pack_forget()
+        self.monitoring_frame.pack(fill=tk.BOTH, expand=True)
         self.window.bind('<g>', lambda e: self.save_snapshot(0))
         self.window.bind('<s>', lambda e: self.save_snapshot(1))
+        self.start_camera()
+
+    def start_camera(self):
+        self.cap = cv2.VideoCapture(0)
+        self.start_time = time.time()
+        self.running = True
+        self.video_thread = threading.Thread(target=self.video_loop, daemon=True)
+        self.video_thread.start()
+
+    def stop_camera(self):
+        self.running = False
+        if hasattr(self, 'cap') and self.cap is not None:
+            self.cap.release()
+            self.cap = None
 
     # --- Geometric Math Utilities ---
     def get_angle(self, a, b, c):
@@ -376,8 +449,7 @@ class PostureApp:
             self.cam_label.config(image=img_tk)
 
     def on_close(self):
-        self.running = False
-        self.cap.release()
+        self.stop_camera()
         self.landmarker.close()
         self.window.destroy()
 
