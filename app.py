@@ -4,7 +4,7 @@ import glob
 import os
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 from PIL import Image, ImageTk
 import threading
 import numpy as np
@@ -57,6 +57,7 @@ class PostureApp:
         self.slouch_start_time = None
         self.alertpopup_active = False       # Flag to prevent multiple popups from staking up
         self.max_slouch_seconds = self.load_settings()    # Time threshold before triggering an alert Sourced from settings file
+        self.alert_dismiss_timer_id = None                # Pending auto-dismiss timer ID
         
         # Download MediaPipe task file if missing
         self.model_path = "pose_landmarker.task"
@@ -512,6 +513,8 @@ class PostureApp:
         if hasattr(self, 'session_duration_timer_id') and self.session_duration_timer_id is not None:
             self.window.after_cancel(self.session_duration_timer_id)
             self.session_duration_timer_id = None
+        if self.alertpopup_active:
+            self.dismiss_alert_popup()
         if hasattr(self, 'cap') and self.cap is not None:
             self.cap.release()
             self.cap = None
@@ -804,14 +807,25 @@ class PostureApp:
                             self.active_status_lbl.config(text="GOOD POSTURE", fg="#a6e3a1", bg="#313244")
                             if hasattr(self, 'status_card'): 
                                 self.status_card.config(highlightbackground="#a6e3a1")
-                            
+
                             # Reset slouch time tracking since posture is good
                             self.slouch_start_time = None
+
+                            # Schedule alert auto-dismiss with a short delay
+                            if self.alertpopup_active and self.alert_dismiss_timer_id is None:
+                                self.alert_dismiss_timer_id = self.window.after(
+                                    0, self.dismiss_alert_popup
+                                )
                         else:
                             self.active_status_lbl.config(text="SLOUCH ALERT", fg="#f38ba8", bg="#512530")
                             if hasattr(self, 'status_card'): 
                                 self.status_card.config(highlightbackground="#f38ba8")
-                            
+
+                            # Cancel pending popup dismissal if user slouches again during cooldown
+                            if self.alert_dismiss_timer_id is not None:
+                                self.window.after_cancel(self.alert_dismiss_timer_id)
+                                self.alert_dismiss_timer_id = None
+
                             # Start clock if this is the beginning of a slouch stretch
                             if self.slouch_start_time is None:
                                 self.slouch_start_time = time.time()
@@ -833,6 +847,20 @@ class PostureApp:
                 self.current_features = None
                 self.last_state_timestamp = time.time()
 
+            # Full-frame slouch alert overlay
+            if self.alertpopup_active:
+                overlay = display_frame.copy()
+                cv2.rectangle(overlay, (0, 0), (w, h), (48, 37, 81), -1)
+                cv2.addWeighted(overlay, 0.4, display_frame, 0.6, 0, display_frame)
+
+                cv2.putText(display_frame, "SLOUCHING!",
+                            (w // 2 - 250, h // 2 - 20),
+                            cv2.FONT_HERSHEY_DUPLEX, 2.5, (255, 255, 255), 5)
+
+                cv2.putText(display_frame, "Fix your posture!",
+                            (w // 2 - 200, h // 2 + 50),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (168, 139, 243), 3)
+
             # 3. Double-buffered UI rendering: Convert the completed frame
             img_rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
             img_pil = Image.fromarray(img_rgb)
@@ -852,15 +880,14 @@ class PostureApp:
             self.active_cam_label.config(image=img_tk)
 
     def trigger_alert_popup(self):
-        """Displays a thread-safe warning popup on the primary desktop layer"""
-        self.window.bell() 
-        
-        messagebox.showwarning(
-            "Posture Reminder", 
-            f"You have been slouching for over {self.max_slouch_seconds} seconds!\n"
-        )
-        
-        # When the user clicks "OK", lower the flag so the system can watch for future slouch windows
+        """Plays an audio alert when slouch threshold is exceeded."""
+        self.window.bell()
+
+    def dismiss_alert_popup(self):
+        """Clears the alert state when posture returns to good."""
+        if self.alert_dismiss_timer_id is not None:
+            self.window.after_cancel(self.alert_dismiss_timer_id)
+            self.alert_dismiss_timer_id = None
         self.alertpopup_active = False
 
     def save_session_summary_json(self):
