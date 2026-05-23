@@ -33,6 +33,10 @@ class PostureApp:
         self.current_features = None
         self.csv_filename = "posture_data_csv/posture_data.csv"
         
+        # --- Rolling Buffer for Posture Stabilization ---
+        self.prediction_history = []
+        self.buffer_size = 15  # Tracks last 15 frames for majority voting
+        
         # Download MediaPipe task file if missing
         self.model_path = "pose_landmarker.task"
         if not os.path.exists(self.model_path):
@@ -283,93 +287,93 @@ class PostureApp:
         relevant_indices = {0, 11, 12}
         connections = [(11, 12), (0, 11), (0, 12)]
 
-        target_fps = 30
-        frame_duration = 1.0 / target_fps
-
-        last_valid_frame = None
-
         while self.running:
-            start_frame_time = time.time()
-
             ret, frame = self.cap.read()
-            if not ret or frame is None:
-                if last_valid_frame is not None:
-                    # Duplicate the last good frame so the UI never displays a black void
-                    frame = last_valid_frame.copy()
-                else:
-                    # If we don't even have a first frame yet, wait patiently
-                    time.sleep(0.01)
-                    continue
-            else:
-                last_valid_frame = frame.copy()
+            if not ret:
+                time.sleep(0.03)
+                continue
 
-            frame = cv2.flip(frame, 1)
-            h, w, _ = frame.shape
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # 1. Create a safe working copy to prevent GUI thread collisions
+            display_frame = cv2.flip(frame, 1)
+            h, w, _ = display_frame.shape
+            
+            # Convert to RGB once for MediaPipe processing
+            rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
             timestamp_ms = int((time.time() - self.start_time) * 1000)
+            result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
 
-            try:
-                result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
-            except Exception as e:
-                print(f"MediaPipe inference skip: {e}")
-                result = None
-
+            # 2. Draw all overlays onto our display_frame buffer
             if result.pose_landmarks:
                 landmarks = result.pose_landmarks[0]
                 
-                # Render Stick Figure Lines
+                # Overlay skeleton lines
                 for a, b in connections:
                     lm_a, lm_b = landmarks[a], landmarks[b]
                     if lm_a.visibility > 0.5 and lm_b.visibility > 0.5:
-                        cv2.line(frame, (int(lm_a.x*w), int(lm_a.y*h)), (int(lm_b.x*w), int(lm_b.y*h)), (166, 227, 161), 2)
+                        cv2.line(display_frame, (int(lm_a.x*w), int(lm_a.y*h)), (int(lm_b.x*w), int(lm_b.y*h)), (226, 214, 180), 2)
                 
-                # Render Joint Dots
+                # Overlay joint dots
                 for idx, lm in enumerate(landmarks):
                     if idx in relevant_indices and lm.visibility > 0.5:
-                        cv2.circle(frame, (int(lm.x*w), int(lm.y*h)), 5, (243, 139, 168), -1)
+                        cv2.circle(display_frame, (int(lm.x*w), int(lm.y*h)), 5, (135, 180, 249), -1)
 
                 all_visible = all(landmarks[i].visibility > 0.5 for i in relevant_indices)
                 
                 if all_visible:
-                    # Update local state calculations
                     self.current_features = self.extract_features(landmarks)
                     
-                    # Safe thread-bound GUI push text metrics updates
-                    self.head_lbl.config(text=f"Head Forward: {self.current_features['head_forward']:.3f}")
-                    self.spine_lbl.config(text=f"Spine Angle: {self.current_features['spine_angle']:.1f}°")
+                    # Update numerical labels dynamically
+                    self.head_lbl.config(text=f"Head Displacement: {self.current_features['head_forward']:.3f}")
+                    self.spine_lbl.config(text=f"Vertebral Angle:  {self.current_features['spine_angle']:.1f}°")
 
-                    # Handle continuous local live inference evaluations
                     if self.is_trained and self.model:
                         feat_df = pd.DataFrame([self.current_features])
-                        prediction = self.model.predict(feat_df)[0]
+                        raw_prediction = self.model.predict(feat_df)[0]
                         
-                        if prediction == 0:
+                        # 1. Append the raw model guess to our rolling history array
+                        self.prediction_history.append(raw_prediction)
+                        
+                        # Keep our historical sliding window locked to the max size
+                        if len(self.prediction_history) > self.buffer_size:
+                            self.prediction_history.pop(0)
+                        
+                        # 2. Run a majority vote over our recent time buffer
+                        # (Takes whichever label appears most frequently)
+                        stabilized_prediction = max(set(self.prediction_history), key=self.prediction_history.count)
+                        
+                        # 3. Update UI states using the clean, smoothed result
+                        if stabilized_prediction == 0:
                             self.status_lbl.config(text="GOOD POSTURE", fg="#a6e3a1", bg="#313244")
+                            if hasattr(self, 'status_card'): 
+                                self.status_card.config(highlightbackground="#a6e3a1")
                         else:
-                            self.status_lbl.config(text="SLOUCHING!", fg="#f38ba8", bg="#512530")
+                            self.status_lbl.config(text="SLOUCH ALERT", fg="#f38ba8", bg="#512530")
+                            if hasattr(self, 'status_card'): 
+                                self.status_card.config(highlightbackground="#f38ba8")
                 else:
                     self.current_features = None
             else:
                 self.current_features = None
 
-            # Map the finalized OpenCV output array cleanly into Tkinter Frame
-            img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(img)
-            img_tk = ImageTk.PhotoImage(image=img)
+            # 3. Double-buffered UI rendering: Convert the completed frame
+            img_rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
+            img_pil = Image.fromarray(img_rgb)
+            img_tk = ImageTk.PhotoImage(image=img_pil)
 
+            # 4. Atomically swap the image asset into the UI label to prevent partial draw drops
             if self.running:
-                self.cam_label.img_tk = img_tk
-                self.cam_label.config(image=img_tk)
-                self.cam_label.image = img_tk  # <-- This stops garbage collection on the widget
-                self.current_frame_ref = img_tk # <-- This double-locks it in the class instance
+                self.window.after(0, self.update_cam_label, img_tk)
 
-            # Dynamic Throttling: Calculate how long processing took 
-            # and sleep only for the remaining time left in the frame window.
-            elapsed = time.time() - start_frame_time
-            sleep_time = max(0.001, frame_duration - elapsed)
-            time.sleep(sleep_time)
+            # Cap frame loop calculation steps to match ~60 FPS update ceilings
+            time.sleep(0.016)
+
+    def update_cam_label(self, img_tk):
+        """Helper to ensure image assignment happens safely on Tkinter's main thread"""
+        if self.running:
+            self.cam_label.img_tk = img_tk
+            self.cam_label.config(image=img_tk)
 
     def on_close(self):
         self.running = False
