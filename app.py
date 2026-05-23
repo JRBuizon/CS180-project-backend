@@ -137,8 +137,52 @@ class PostureApp:
                   ).pack(side=tk.LEFT, padx=10)
 
         tk.Button(btn_frame, text="Logs", font=("Arial", 11),
-                  bg="#313244", fg="#cdd6f4", width=12, command=lambda: None
+                  bg="#313244", fg="#cdd6f4", width=12, command=self.show_session_logs
                   ).pack(side=tk.LEFT, padx=10)
+
+        # ===================== Session Logs Page =====================
+        self.session_logs_frame = tk.Frame(self.page_container, bg="#1e1e2e")
+        session_top = tk.Frame(self.session_logs_frame, bg="#1e1e2e")
+        session_top.pack(fill=tk.X, padx=20, pady=20)
+        tk.Button(session_top, text="← Back to Home",
+                  font=("Arial", 10, "bold"), bg="#45475a", fg="#cdd6f4",
+                  command=self.show_home
+                  ).pack(side=tk.LEFT)
+        tk.Label(self.session_logs_frame, text="Session Logs",
+                 font=("Arial", 24, "bold"), bg="#1e1e2e", fg="#cdd6f4"
+                 ).pack(pady=(10, 20))
+
+        self.session_logs_list_container = tk.Frame(self.session_logs_frame, bg="#1e1e2e")
+        self.session_logs_list_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
+
+        self.session_logs_canvas = tk.Canvas(self.session_logs_list_container,
+                                            bg="#1e1e2e", highlightthickness=0, bd=0)
+        self.session_logs_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        session_scrollbar = tk.Scrollbar(self.session_logs_list_container,
+                                         orient=tk.VERTICAL, command=self.session_logs_canvas.yview)
+        session_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.session_logs_canvas.configure(yscrollcommand=session_scrollbar.set)
+
+        self.session_logs_content = tk.Frame(self.session_logs_canvas, bg="#1e1e2e")
+        self.session_logs_window = self.session_logs_canvas.create_window((0, 0), window=self.session_logs_content, anchor="nw")
+
+        self.session_logs_content.bind(
+            "<Configure>",
+            lambda event: self.session_logs_canvas.configure(scrollregion=self.session_logs_canvas.bbox("all"))
+        )
+        self.session_logs_canvas.bind(
+            "<Configure>",
+            lambda event: self.session_logs_canvas.itemconfig(self.session_logs_window, width=event.width)
+        )
+        self.session_logs_canvas.bind("<Enter>", self._bind_session_logs_mousewheel)
+        self.session_logs_canvas.bind("<Leave>", self._unbind_session_logs_mousewheel)
+
+        # Show a placeholder on first startup before logs are loaded
+        self.session_logs_empty_label = tk.Label(self.session_logs_content,
+                                                  text="No saved sessions yet.",
+                                                  font=("Arial", 12), bg="#1e1e2e", fg="#a6adc8")
+        self.session_logs_empty_label.pack(pady=10)
 
         # ===================== Monitoring Page =====================
         self.monitoring_frame = tk.Frame(self.page_container, bg="#1e1e2e")
@@ -155,7 +199,7 @@ class PostureApp:
         self.right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 20), pady=20)
         self.right_frame.pack_propagate(False)
 
-        # Back to Home Button
+        # End Session Button
         tk.Button(self.right_frame, text="⏹ End Session",
                   font=("Arial", 10, "bold"), bg="#f38ba8", fg="#11111b",
                   command=self.show_home
@@ -203,7 +247,19 @@ class PostureApp:
         tk.Button(self.right_frame, text="📦 Update Model",
                   bg="#fab387", fg="#11111b", font=("Arial", 12, "bold"),
                   command=self.export_model_weights
-                  ).pack(fill=tk.X, padx=15, pady=20)
+                  ).pack(fill=tk.X, padx=15, pady=(15, 8))
+
+        # Session Duration Display
+        duration_frame = tk.Frame(self.right_frame, bg="#181825")
+        duration_frame.pack(fill=tk.X, padx=15, pady=(0, 15))
+        tk.Label(duration_frame, text="SESSION DURATION",
+                 font=("Arial", 10, "bold"), bg="#181825", fg="#cdd6f4"
+                 ).pack(anchor="w")
+        self.session_duration_lbl = tk.Label(duration_frame, text="00:00:00",
+                                             font=("Arial", 14, "bold"),
+                                             bg="#313244", fg="#cdd6f4",
+                                             width=18, pady=10)
+        self.session_duration_lbl.pack(fill=tk.X)
 
         # ===================== Settings Page =====================
         self.settings_frame = tk.Frame(self.page_container, bg="#1e1e2e")
@@ -314,11 +370,13 @@ class PostureApp:
         self.stop_camera()
         self.monitoring_frame.pack_forget()
         self.settings_frame.pack_forget()
+        self.session_logs_frame.pack_forget()
         self.home_frame.pack(fill=tk.BOTH, expand=True)
         self.window.unbind('<g>')
         self.window.unbind('<s>')
 
     def show_monitoring(self):
+        self.session_logs_frame.pack_forget()
         self.home_frame.pack_forget()
         self.monitoring_frame.pack(fill=tk.BOTH, expand=True)
         
@@ -347,14 +405,85 @@ class PostureApp:
         self.window.bind('<s>', lambda e: self.save_snapshot(1))
         self.start_camera(context="settings")
 
+    def show_session_logs(self):
+        self.stop_camera()
+        self.monitoring_frame.pack_forget()
+        self.home_frame.pack_forget()
+        self.session_logs_frame.pack(fill=tk.BOTH, expand=True)
+        self.window.unbind('<g>')
+        self.window.unbind('<s>')
+        self.render_session_logs()
+        self.session_logs_canvas.yview_moveto(0)
+
+    def load_session_history(self):
+        log_filepath = os.path.join("posture_logs", "session_history.json")
+        if not os.path.exists(log_filepath):
+            return []
+
+        try:
+            import json
+            with open(log_filepath, "r") as json_file:
+                history_records = json.load(json_file)
+            if not isinstance(history_records, list):
+                return []
+            return history_records
+        except Exception:
+            return []
+
+    def render_session_logs(self):
+        for child in self.session_logs_content.winfo_children():
+            child.destroy()
+
+        sessions = self.load_session_history()
+        if not sessions:
+            tk.Label(self.session_logs_content, text="No saved sessions yet.",
+                     font=("Arial", 12), bg="#1e1e2e", fg="#a6adc8"
+                     ).pack(pady=10)
+            return
+
+        # Most recent sessions first
+        for session in reversed(sessions):
+            entry_frame = tk.Frame(self.session_logs_content, bg="#313244", bd=1, relief=tk.SOLID)
+            entry_frame.pack(fill=tk.X, pady=8)
+
+            header_text = session.get("session_date", "Unknown date")
+            tk.Label(entry_frame, text=header_text,
+                     font=("Arial", 12, "bold"), bg="#313244", fg="#cdd6f4"
+                     ).pack(anchor="w", padx=10, pady=(8, 2))
+
+            metrics_frame = tk.Frame(entry_frame, bg="#313244")
+            metrics_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+
+            left_frame = tk.Frame(metrics_frame, bg="#313244")
+            left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            right_frame = tk.Frame(metrics_frame, bg="#313244")
+            right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+            tk.Label(left_frame, text=f"Total: {session.get('total_duration', 0)}s",
+                     font=("Arial", 10), bg="#313244", fg="#cdd6f4"
+                     ).pack(anchor="w")
+            tk.Label(left_frame, text=f"Good: {session.get('good_posture_duration', 0)}s",
+                     font=("Arial", 10), bg="#313244", fg="#a6e3a1"
+                     ).pack(anchor="w", pady=2)
+            tk.Label(left_frame, text=f"Bad: {session.get('bad_posture_duration', 0)}s",
+                     font=("Arial", 10), bg="#313244", fg="#f38ba8"
+                     ).pack(anchor="w", pady=2)
+
+            tk.Label(right_frame, text=f"Alerts: {session.get('total_slouch_alerts', 0)}",
+                     font=("Arial", 10), bg="#313244", fg="#cdd6f4"
+                     ).pack(anchor="w")
+            tk.Label(right_frame, text=f"Trained: {session.get('trained_this_session', False)}",
+                     font=("Arial", 10), bg="#313244", fg="#cdd6f4"
+                     ).pack(anchor="w", pady=2)
+            tk.Label(right_frame, text=f"Duration Log: {session.get('total_duration', 0)}s",
+                     font=("Arial", 10), bg="#313244", fg="#cdd6f4"
+                     ).pack(anchor="w", pady=2)
+
     def start_camera(self, context="monitoring"):
         self.cap = cv2.VideoCapture(0)
         self.start_time = time.time()
-        
         self.session_context = context
-        
         if context == "monitoring":
-            # --- Initialize Session Statistics ---
             self.session_start_wall_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.total_alerts = 0
             self.good_posture_duration = 0.0
@@ -362,21 +491,64 @@ class PostureApp:
             self.last_state_timestamp = time.time()
             self.current_session_state = None
             self.trained_this_session = False
-        
+            self.session_duration_timer_id = None
         if self.landmarker is None:
             self.landmarker = vision.PoseLandmarker.create_from_options(self.options)
         self.running = True
         self.video_thread = threading.Thread(target=self.video_loop, daemon=True)
         self.video_thread.start()
+        if context == "monitoring":
+            self.update_session_duration()
 
     def stop_camera(self):
         self.running = False
+        if hasattr(self, 'session_duration_timer_id') and self.session_duration_timer_id is not None:
+            self.window.after_cancel(self.session_duration_timer_id)
+            self.session_duration_timer_id = None
         if hasattr(self, 'cap') and self.cap is not None:
             self.cap.release()
             self.cap = None
         if hasattr(self, 'landmarker') and self.landmarker is not None:
             self.landmarker.close()
             self.landmarker = None
+
+    def format_duration(self, total_seconds):
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        seconds = int(total_seconds % 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    def _bind_session_logs_mousewheel(self, event):
+        self.session_logs_canvas.bind_all("<MouseWheel>", self.on_session_logs_mousewheel)
+        self.session_logs_canvas.bind_all("<Button-4>", self.on_session_logs_mousewheel)
+        self.session_logs_canvas.bind_all("<Button-5>", self.on_session_logs_mousewheel)
+
+    def _unbind_session_logs_mousewheel(self, event):
+        self.session_logs_canvas.unbind_all("<MouseWheel>")
+        self.session_logs_canvas.unbind_all("<Button-4>")
+        self.session_logs_canvas.unbind_all("<Button-5>")
+
+    def on_session_logs_mousewheel(self, event):
+        delta = 0
+        if hasattr(event, 'delta') and event.delta:
+            delta = int(-1 * (event.delta / 120))
+        elif getattr(event, 'num', None) == 4:
+            delta = -1
+        elif getattr(event, 'num', None) == 5:
+            delta = 1
+
+        if delta:
+            self.session_logs_canvas.yview_scroll(delta, "units")
+
+    def update_session_duration(self):
+        total_duration = 0.0
+        if hasattr(self, 'good_posture_duration') and hasattr(self, 'bad_posture_duration'):
+            total_duration = self.good_posture_duration + self.bad_posture_duration
+        if self.current_session_state in (0, 1) and self.last_state_timestamp is not None:
+            total_duration += time.time() - self.last_state_timestamp
+        if hasattr(self, 'session_duration_lbl'):
+            self.session_duration_lbl.config(text=self.format_duration(total_duration))
+        self.session_duration_timer_id = self.window.after(500, self.update_session_duration)
 
     # --- Geometric Math Utilities ---
     def get_angle(self, a, b, c):
