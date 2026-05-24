@@ -26,7 +26,7 @@ class PostureApp:
         self.window = window
         self.window.title("Personal Posture Journal")
         self.window.geometry("1000x650")
-        self.window.configure(bg="#1e1e2e")
+        self.window.configure(bg="#1f1f1e")
 
         # --- Data & Model State ---
         self.model = None
@@ -80,6 +80,7 @@ class PostureApp:
         else:
             self.train_model_from_local_data()
 
+
         # --- MediaPipe Setup ---
         base_options = python.BaseOptions(model_asset_path=self.model_path)
         self.options = vision.PoseLandmarkerOptions(
@@ -103,68 +104,68 @@ class PostureApp:
     def setup_styles(self):
         style = ttk.Style()
         style.theme_use("clam")
-        style.configure("TLabel", background="#1e1e2e", foreground="#cdd6f4", font=("Arial", 11))
-        style.configure("TButton", font=("Arial", 10, "bold"), background="#89b4fa", foreground="#11111b")
-        style.map("TButton", background=[("active", "#b4befe")])
+        style.configure("TLabel", background="#30302e", foreground="#f1f0ec", font=("Arial", 11))
+        style.configure("TButton", font=("Arial", 10), background="#30302e", foreground="#f1f0ec")
+        style.map("TButton", background=[("active", "#1f1f1e"), ("hover", "#1f1f1e")])
 
     def create_widgets(self):
         # Page container — holds both home and monitoring pages
-        self.page_container = tk.Frame(self.window, bg="#1e1e2e")
+        self.page_container = tk.Frame(self.window, bg="#1f1f1e")
         self.page_container.pack(fill=tk.BOTH, expand=True)
 
         # ===================== Home Page =====================
-        self.home_frame = tk.Frame(self.page_container, bg="#1e1e2e")
+        self.home_frame = tk.Frame(self.page_container, bg="#1f1f1e")
 
         # Title Section
         tk.Label(self.home_frame, text="Personal Posture Journal",
-                 font=("Arial", 28, "bold"), bg="#1e1e2e", fg="#cdd6f4"
+                 font=("Arial", 28), bg="#1f1f1e", fg="#f1f0ec"
                  ).pack(pady=(120, 10))
         tk.Label(self.home_frame, text="Real-time posture monitoring app",
-                 font=("Arial", 14), bg="#1e1e2e", fg="#a6adc8"
+                 font=("Arial", 14), bg="#1f1f1e", fg="#f1f0ec"
                  ).pack(pady=(0, 60))
 
         # Start Session Button
-        tk.Button(self.home_frame, text="START SESSION",
-                  font=("Arial", 16, "bold"), bg="#89b4fa", fg="#11111b",
+        tk.Button(self.home_frame, text="Start Session",
+                  font=("Arial", 16), bg="#30302e", fg="#f1f0ec", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec",
                   width=20, height=2, command=self.show_monitoring
                   ).pack(pady=20)
 
         # Placeholder Buttons Row
-        btn_frame = tk.Frame(self.home_frame, bg="#1e1e2e")
+        btn_frame = tk.Frame(self.home_frame, bg="#1f1f1e")
         btn_frame.pack(pady=40)
 
         tk.Button(btn_frame, text="Settings", font=("Arial", 11),
-                  bg="#313244", fg="#cdd6f4", width=12, command=self.show_settings
+                   bg="#30302e", fg="#f1f0ec", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec", width=12, command=self.show_settings
                   ).pack(side=tk.LEFT, padx=10)
 
         tk.Button(btn_frame, text="Logs", font=("Arial", 11),
-                  bg="#313244", fg="#cdd6f4", width=12, command=self.show_session_logs
+                   bg="#30302e", fg="#f1f0ec", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec", width=12, command=self.show_session_logs
                   ).pack(side=tk.LEFT, padx=10)
 
-        exit_frame = tk.Frame(self.home_frame, bg="#1e1e2e")
+        exit_frame = tk.Frame(self.home_frame, bg="#1f1f1e")
         exit_frame.pack(pady=(0, 40))
 
         tk.Button(exit_frame, text="Exit", font=("Arial", 11),
-                  bg="#f38ba8", fg="#11111b", width=12, command=self.on_close
+                   bg="#30302e", fg="#f1f0ec", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec", width=12, command=self.on_close
                   ).pack()
 
         # ===================== Session Logs Page =====================
-        self.session_logs_frame = tk.Frame(self.page_container, bg="#1e1e2e")
-        session_top = tk.Frame(self.session_logs_frame, bg="#1e1e2e")
+        self.session_logs_frame = tk.Frame(self.page_container, bg="#1f1f1e")
+        session_top = tk.Frame(self.session_logs_frame, bg="#1f1f1e")
         session_top.pack(fill=tk.X, padx=20, pady=20)
         tk.Button(session_top, text="← Back to Home",
-                  font=("Arial", 10, "bold"), bg="#45475a", fg="#cdd6f4",
+                  font=("Arial", 10),  bg="#30302e", fg="#f1f0ec", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec",
                   command=self.show_home
                   ).pack(side=tk.LEFT)
         tk.Label(self.session_logs_frame, text="Session Logs",
-                 font=("Arial", 24, "bold"), bg="#1e1e2e", fg="#cdd6f4"
+                 font=("Arial", 24), bg="#1f1f1e", fg="#f1f0ec"
                  ).pack(pady=(10, 20))
 
-        self.session_logs_list_container = tk.Frame(self.session_logs_frame, bg="#1e1e2e")
+        self.session_logs_list_container = tk.Frame(self.session_logs_frame, bg="#1f1f1e")
         self.session_logs_list_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
 
         self.session_logs_canvas = tk.Canvas(self.session_logs_list_container,
-                                            bg="#1e1e2e", highlightthickness=0, bd=0)
+                                            bg="#1f1f1e", highlightthickness=0, bd=0)
         self.session_logs_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         session_scrollbar = tk.Scrollbar(self.session_logs_list_container,
@@ -172,7 +173,7 @@ class PostureApp:
         session_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.session_logs_canvas.configure(yscrollcommand=session_scrollbar.set)
 
-        self.session_logs_content = tk.Frame(self.session_logs_canvas, bg="#1e1e2e")
+        self.session_logs_content = tk.Frame(self.session_logs_canvas, bg="#1f1f1e")
         self.session_logs_window = self.session_logs_canvas.create_window((0, 0), window=self.session_logs_content, anchor="nw")
 
         self.session_logs_content.bind(
@@ -189,43 +190,43 @@ class PostureApp:
         # Show a placeholder on first startup before logs are loaded
         self.session_logs_empty_label = tk.Label(self.session_logs_content,
                                                   text="No saved sessions yet.",
-                                                  font=("Arial", 12), bg="#1e1e2e", fg="#a6adc8")
+                                                  font=("Arial", 12), bg="#1f1f1e", fg="#f1f0ec")
         self.session_logs_empty_label.pack(pady=10)
 
         # ===================== Monitoring Page =====================
-        self.monitoring_frame = tk.Frame(self.page_container, bg="#1e1e2e")
+        self.monitoring_frame = tk.Frame(self.page_container, bg="#1f1f1e")
 
         # Left Panel - Camera Feed
-        self.left_frame = tk.Frame(self.monitoring_frame, bg="#1e1e2e")
+        self.left_frame = tk.Frame(self.monitoring_frame, bg="#1f1f1e")
         self.left_frame.pack(side=tk.LEFT, padx=20, pady=20, fill=tk.BOTH, expand=True)
 
-        self.cam_label = tk.Label(self.left_frame, bg="#313244", width=640, height=480)
+        self.cam_label = tk.Label(self.left_frame, bg="#30302e", width=640, height=480)
         self.cam_label.pack(fill=tk.BOTH, expand=True)
 
         # Right Panel - Control Center
-        self.right_frame = tk.Frame(self.monitoring_frame, bg="#181825", width=300)
+        self.right_frame = tk.Frame(self.monitoring_frame, bg="#30302e", width=300)
         self.right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 20), pady=20)
         self.right_frame.pack_propagate(False)
 
         # End Session Button
         tk.Button(self.right_frame, text="⏹ End Session",
-                  font=("Arial", 10, "bold"), bg="#f38ba8", fg="#11111b",
+                  font=("Arial", 10), bg="#30302e", fg="#f1f0ec", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec",
                   command=self.show_home
                   ).pack(fill=tk.X, padx=15, pady=(15, 5))
 
         # Status Display
-        tk.Label(self.right_frame, text="POSTURE STATUS",
-                 font=("Arial", 14, "bold"), bg="#181825", fg="#a6adc8"
+        tk.Label(self.right_frame, text="STATUS",
+                 font=("Arial", 14), bg="#30302e", fg="#f1f0ec"
                  ).pack(pady=(20, 5))
-        self.status_lbl = tk.Label(self.right_frame, text="NO MODEL TRAINED",
-                                   font=("Arial", 18, "bold"),
-                                   bg="#313244", fg="#f38ba8", width=18, pady=10)
+        self.status_lbl = tk.Label(self.right_frame, text=("UNAVAILABLE" if self.is_trained else "NO MODEL TRAINED"),
+                                   font=("Arial", 18),
+                                   bg="#30302e", fg="#f38ba8", width=18, pady=10)
         self.status_lbl.pack(pady=10)
 
         # Live Metrics
         self.metrics_frame = tk.LabelFrame(self.right_frame, text=" Live Metrics ",
-                                           bg="#181825", fg="#cdd6f4",
-                                           font=("Arial", 10, "bold"), padx=10, pady=10)
+                                           bg="#30302e", fg="#f1f0ec",
+                                           font=("Arial", 10), padx=10, pady=10)
         self.metrics_frame.pack(fill=tk.X, padx=15, pady=15)
 
         self.head_lbl = ttk.Label(self.metrics_frame, text="Head Forward: --")
@@ -235,69 +236,69 @@ class PostureApp:
 
         # Data Collection Section
         self.train_frame = tk.LabelFrame(self.right_frame, text=" Data Collection ",
-                                         bg="#181825", fg="#cdd6f4",
-                                         font=("Arial", 10, "bold"), padx=10, pady=10)
+                                         bg="#30302e", fg="#f1f0ec",
+                                         font=("Arial", 10), padx=10, pady=10)
         self.train_frame.pack(fill=tk.X, padx=15, pady=15)
 
         ttk.Label(self.train_frame, text="Collect new snapshots:").pack(pady=5)
 
         tk.Button(self.train_frame, text="Capture GOOD (G)",
-                  bg="#a6e3a1", fg="#11111b", font=("Arial", 10, "bold"),
+                  bg="#576B57", fg="#a6e3a1", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec", font=("Arial", 10),
                   command=lambda: self.save_snapshot(0)
                   ).pack(fill=tk.X, pady=4)
 
         tk.Button(self.train_frame, text="Capture SLOUCH (S)",
-                  bg="#f38ba8", fg="#11111b", font=("Arial", 10, "bold"),
+                  bg="#512530", fg="#f38ba8", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec",font=("Arial", 10),
                   command=lambda: self.save_snapshot(1)
                   ).pack(fill=tk.X, pady=4)
 
 
         # Session Duration Display
-        duration_frame = tk.Frame(self.right_frame, bg="#181825")
+        duration_frame = tk.Frame(self.right_frame, bg="#30302e")
         duration_frame.pack(fill=tk.X, padx=15, pady=(0, 15))
         tk.Label(duration_frame, text="SESSION DURATION",
-                 font=("Arial", 10, "bold"), bg="#181825", fg="#cdd6f4"
+                 font=("Arial", 10), bg="#30302e", fg="#f1f0ec"
                  ).pack(anchor="w")
         self.session_duration_lbl = tk.Label(duration_frame, text="00:00:00",
-                                             font=("Arial", 14, "bold"),
-                                             bg="#313244", fg="#cdd6f4",
+                                             font=("Arial", 14),
+                                             bg="#30302e", fg="#f1f0ec",
                                              width=18, pady=10)
         self.session_duration_lbl.pack(fill=tk.X)
 
         # ===================== Settings Page =====================
-        self.settings_frame = tk.Frame(self.page_container, bg="#1e1e2e")
+        self.settings_frame = tk.Frame(self.page_container, bg="#1f1f1e")
 
         # Left Panel - Camera Feed Calibration
-        self.settings_left_frame = tk.Frame(self.settings_frame, bg="#1e1e2e")
+        self.settings_left_frame = tk.Frame(self.settings_frame, bg="#1f1f1e")
         self.settings_left_frame.pack(side=tk.LEFT, padx=20, pady=20, fill=tk.BOTH, expand=True)
 
-        self.settings_cam_label = tk.Label(self.settings_left_frame, bg="#313244", width=640, height=480)
+        self.settings_cam_label = tk.Label(self.settings_left_frame, bg="#30302e", width=640, height=480)
         self.settings_cam_label.pack(fill=tk.BOTH, expand=True)
 
         # Right Panel - Configuration Center
-        self.settings_right_frame = tk.Frame(self.settings_frame, bg="#181825", width=300)
+        self.settings_right_frame = tk.Frame(self.settings_frame, bg="#30302e", width=300)
         self.settings_right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 20), pady=20)
         self.settings_right_frame.pack_propagate(False)
 
         # Back to Home Button
         tk.Button(self.settings_right_frame, text="← Back to Home",
-                  font=("Arial", 10, "bold"), bg="#45475a", fg="#cdd6f4",
+                  font=("Arial", 10), bg="#30302e", fg="#f1f0ec", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec",
                   command=self.show_home
                   ).pack(fill=tk.X, padx=15, pady=(15, 5))
 
         # Status Display
         tk.Label(self.settings_right_frame, text="POSTURE STATUS",
-                 font=("Arial", 14, "bold"), bg="#181825", fg="#a6adc8"
+                 font=("Arial", 14), bg="#30302e", fg="#f1f0ec"
                  ).pack(pady=(20, 5))
         self.settings_status_lbl = tk.Label(self.settings_right_frame, text="NO MODEL TRAINED",
-                                            font=("Arial", 18, "bold"),
-                                            bg="#313244", fg="#f38ba8", width=18, pady=10)
+                                            font=("Arial", 18),
+                                            bg="#512530", fg="#f38ba8", width=18, pady=10)
         self.settings_status_lbl.pack(pady=10)
 
         # Live Metrics
         self.settings_metrics_frame = tk.LabelFrame(self.settings_right_frame, text=" Live Metrics ",
-                                                   bg="#181825", fg="#cdd6f4",
-                                                   font=("Arial", 10, "bold"), padx=10, pady=10)
+                                                   bg="#30302e", fg="#f1f0ec",
+                                                   font=("Arial", 10), padx=10, pady=10)
         self.settings_metrics_frame.pack(fill=tk.X, padx=15, pady=15)
 
         self.settings_head_lbl = ttk.Label(self.settings_metrics_frame, text="Head Forward: --")
@@ -307,8 +308,8 @@ class PostureApp:
 
         # Configurable Alert Timer Section
         self.alert_timer_frame = tk.LabelFrame(self.settings_right_frame, text=" Slouch Threshold ",
-                                               bg="#181825", fg="#cdd6f4",
-                                               font=("Arial", 10, "bold"), padx=10, pady=10)
+                                               bg="#30302e", fg="#f1f0ec",
+                                               font=("Arial", 10), padx=10, pady=10)
         self.alert_timer_frame.pack(fill=tk.X, padx=15, pady=10)
 
         ttk.Label(self.alert_timer_frame, text="Delay (seconds):").pack(side=tk.LEFT, padx=5)
@@ -326,23 +327,23 @@ class PostureApp:
 
         # Data Collection Section
         self.settings_train_frame = tk.LabelFrame(self.settings_right_frame, text=" Data Collection ",
-                                                 bg="#181825", fg="#cdd6f4",
-                                                 font=("Arial", 10, "bold"), padx=10, pady=10)
+                                                 bg="#30302e", fg="#f1f0ec",
+                                                 font=("Arial", 10), padx=10, pady=10)
         self.settings_train_frame.pack(fill=tk.X, padx=15, pady=10)
 
         ttk.Label(self.settings_train_frame, text="Collect calibration snapshots:").pack(pady=5)
         tk.Button(self.settings_train_frame, text="Capture GOOD (G)",
-                  bg="#a6e3a1", fg="#11111b", font=("Arial", 10, "bold"),
+                  bg="#576B57", fg="#a6e3a1", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec", font=("Arial", 10),
                   command=lambda: self.save_snapshot(0)
                   ).pack(fill=tk.X, pady=4)
 
         tk.Button(self.settings_train_frame, text="Capture SLOUCH (S)",
-                  bg="#f38ba8", fg="#11111b", font=("Arial", 10, "bold"),
+                  bg="#512530", fg="#f38ba8", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec", font=("Arial", 10),
                   command=lambda: self.save_snapshot(1)
                   ).pack(fill=tk.X, pady=4)
 
         tk.Button(self.settings_right_frame, text="💾 Save Settings",
-                  bg="#a6e3a1", fg="#11111b", font=("Arial", 12, "bold"),
+                  bg="#30302e", fg="#f1f0ec", activebackground="#1f1f1e", activeforeground="#f1f0ec",highlightbackground="#f1f0ec", font=("Arial", 12),
                   command=self.save_settings_from_spinbox
                   ).pack(fill=tk.X, padx=15, pady=(5, 20))
 
@@ -434,46 +435,46 @@ class PostureApp:
         sessions = self.load_session_history()
         if not sessions:
             tk.Label(self.session_logs_content, text="No saved sessions yet.",
-                     font=("Arial", 12), bg="#1e1e2e", fg="#a6adc8"
+                     font=("Arial", 12), bg="#1f1f1e", fg="#f1f0ec"
                      ).pack(pady=10)
             return
 
         # Most recent sessions first
         for session in reversed(sessions):
-            entry_frame = tk.Frame(self.session_logs_content, bg="#313244", bd=1, relief=tk.SOLID)
+            entry_frame = tk.Frame(self.session_logs_content, bg="#30302e", bd=1, relief=tk.SOLID)
             entry_frame.pack(fill=tk.X, pady=8)
 
             header_text = session.get("session_date", "Unknown date")
             tk.Label(entry_frame, text=header_text,
-                     font=("Arial", 12, "bold"), bg="#313244", fg="#cdd6f4"
+                     font=("Arial", 12), bg="#30302e", fg="#f1f0ec"
                      ).pack(anchor="w", padx=10, pady=(8, 2))
 
-            metrics_frame = tk.Frame(entry_frame, bg="#313244")
+            metrics_frame = tk.Frame(entry_frame, bg="#30302e")
             metrics_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
 
-            left_frame = tk.Frame(metrics_frame, bg="#313244")
+            left_frame = tk.Frame(metrics_frame, bg="#30302e")
             left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            right_frame = tk.Frame(metrics_frame, bg="#313244")
+            right_frame = tk.Frame(metrics_frame, bg="#30302e")
             right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
             tk.Label(left_frame, text=f"Total: {session.get('total_duration', 0)}s",
-                     font=("Arial", 10), bg="#313244", fg="#cdd6f4"
+                     font=("Arial", 10), bg="#30302e", fg="#f1f0ec"
                      ).pack(anchor="w")
             tk.Label(left_frame, text=f"Good: {session.get('good_posture_duration', 0)}s",
-                     font=("Arial", 10), bg="#313244", fg="#a6e3a1"
+                     font=("Arial", 10), bg="#30302e", fg="#a6e3a1"
                      ).pack(anchor="w", pady=2)
             tk.Label(left_frame, text=f"Bad: {session.get('bad_posture_duration', 0)}s",
-                     font=("Arial", 10), bg="#313244", fg="#f38ba8"
+                     font=("Arial", 10), bg="#30302e", fg="#f38ba8"
                      ).pack(anchor="w", pady=2)
 
             tk.Label(right_frame, text=f"Alerts: {session.get('total_slouch_alerts', 0)}",
-                     font=("Arial", 10), bg="#313244", fg="#cdd6f4"
+                     font=("Arial", 10), bg="#30302e", fg="#f1f0ec"
                      ).pack(anchor="w")
             tk.Label(right_frame, text=f"Trained: {session.get('trained_this_session', False)}",
-                     font=("Arial", 10), bg="#313244", fg="#cdd6f4"
+                     font=("Arial", 10), bg="#30302e", fg="#f1f0ec"
                      ).pack(anchor="w", pady=2)
             tk.Label(right_frame, text=f"Duration Log: {session.get('total_duration', 0)}s",
-                     font=("Arial", 10), bg="#313244", fg="#cdd6f4"
+                     font=("Arial", 10), bg="#30302e", fg="#f1f0ec"
                      ).pack(anchor="w", pady=2)
 
     def start_camera(self, context="monitoring"):
@@ -793,7 +794,7 @@ class PostureApp:
                         
                         # 3. Update UI states using the clean, smoothed result
                         if stabilized_prediction == 0:
-                            self.active_status_lbl.config(text="GOOD POSTURE", fg="#a6e3a1", bg="#313244")
+                            self.active_status_lbl.config(text="GOOD POSTURE", fg="#a6e3a1", bg="#576B57")
                             if hasattr(self, 'status_card'): 
                                 self.status_card.config(highlightbackground="#a6e3a1")
 
@@ -830,9 +831,11 @@ class PostureApp:
                                         self.total_alerts += 1
                                         self.window.after(0, self.trigger_alert_popup)
                 else:
+                    self.active_status_lbl.config(text="NO USER FOUND", bg="#30302e", fg="#f1f0ec")
                     self.current_features = None
                     self.last_state_timestamp = time.time()
             else:
+                self.active_status_lbl.config(text="NO USER FOUND", bg="#30302e", fg="#f1f0ec")
                 self.current_features = None
                 self.last_state_timestamp = time.time()
 
