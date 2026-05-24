@@ -251,11 +251,6 @@ class PostureApp:
                   command=lambda: self.save_snapshot(1)
                   ).pack(fill=tk.X, pady=4)
 
-        # Export Action Button
-        tk.Button(self.right_frame, text="📦 Update Model",
-                  bg="#fab387", fg="#11111b", font=("Arial", 12, "bold"),
-                  command=self.export_model_weights
-                  ).pack(fill=tk.X, padx=15, pady=(15, 8))
 
         # Session Duration Display
         duration_frame = tk.Frame(self.right_frame, bg="#181825")
@@ -345,12 +340,6 @@ class PostureApp:
                   bg="#f38ba8", fg="#11111b", font=("Arial", 10, "bold"),
                   command=lambda: self.save_snapshot(1)
                   ).pack(fill=tk.X, pady=4)
-
-        # Export Action Button
-        tk.Button(self.settings_right_frame, text="📦 Update Model",
-                  bg="#fab387", fg="#11111b", font=("Arial", 12, "bold"),
-                  command=self.export_model_weights
-                  ).pack(fill=tk.X, padx=15, pady=5)
 
         tk.Button(self.settings_right_frame, text="💾 Save Settings",
                   bg="#a6e3a1", fg="#11111b", font=("Arial", 12, "bold"),
@@ -945,6 +934,7 @@ class PostureApp:
     def on_close(self):
         if hasattr(self, 'running') and self.running:
             self.save_session_summary_json()
+        self.export_model_weights()
         self.stop_camera()
         self.window.destroy()
 
