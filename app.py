@@ -569,7 +569,7 @@ class PostureApp:
         hip_mid = [(l_hip[0] + r_hip[0]) / 2, (l_hip[1] + r_hip[1]) / 2]
 
         head_forward  = nose[1] - sh_mid[1]
-        spine_angle   = self.get_angle(sh_mid, hip_mid, [hip_mid[0], hip_mid[1] + 1])
+        spine_angle   = self.get_angle(sh_mid, hip_mid, nose)
         shoulder_tilt = abs(l_sh[1] - r_sh[1])
 
         return {
