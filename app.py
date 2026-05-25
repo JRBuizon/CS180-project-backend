@@ -560,18 +560,16 @@ class PostureApp:
 
     def extract_features(self, landmarks):
         nose  = [landmarks[0].x,  landmarks[0].y]
-        l_ear = [landmarks[7].x,  landmarks[7].y]
-        r_ear = [landmarks[8].x,  landmarks[8].y]
         l_sh  = [landmarks[11].x, landmarks[11].y]
         r_sh  = [landmarks[12].x, landmarks[12].y]
+        l_hip = [landmarks[23].x, landmarks[23].y]
+        r_hip = [landmarks[24].x, landmarks[24].y]
 
-        sh_mid   = [(l_sh[0] + r_sh[0]) / 2,   (l_sh[1] + r_sh[1]) / 2]
-        head_mid = [(l_ear[0] + r_ear[0]) / 2, (l_ear[1] + r_ear[1]) / 2]
+        sh_mid  = [(l_sh[0] + r_sh[0]) / 2,  (l_sh[1] + r_sh[1]) / 2]
+        hip_mid = [(l_hip[0] + r_hip[0]) / 2, (l_hip[1] + r_hip[1]) / 2]
 
-        head_forward = nose[0] - sh_mid[0]
-
-        spine_angle = self.get_angle(head_mid, sh_mid, [sh_mid[0], sh_mid[1] + 1])
-
+        head_forward  = nose[1] - sh_mid[1]
+        spine_angle   = self.get_angle(sh_mid, hip_mid, [hip_mid[0], hip_mid[1] + 1])
         shoulder_tilt = abs(l_sh[1] - r_sh[1])
 
         return {
